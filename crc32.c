@@ -1035,6 +1035,16 @@ unsigned long ZEXPORT crc32_z(crc, buf, len)
 #endif /* W */
 
     /* Complete the computation of the CRC on any remaining bytes. */
+
+#ifdef CRC32_UNROLL_LESS
+    while (len >= 4) {
+        len -= 4;
+        crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
+        crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
+        crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
+        crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
+    }
+#else
     while (len >= 8) {
         len -= 8;
         crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
@@ -1046,6 +1056,8 @@ unsigned long ZEXPORT crc32_z(crc, buf, len)
         crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
         crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
     }
+#endif
+
     while (len) {
         len--;
         crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
