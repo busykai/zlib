@@ -303,6 +303,14 @@ typedef struct internal_state {
 /* Number of bytes after end of data in window to initialize in order to avoid
    memory checker errors from longest match routines */
 
+#ifdef ASMV
+#  pragma message("Assembler code may have bugs -- use at your own risk")
+      void match_init OF((void)); /* asm code initialization */
+      uInt longest_match  OF((deflate_state *s, IPos cur_match));
+#else
+uInt longest_match  OF((deflate_state *s, IPos cur_match));
+#endif
+
         /* in trees.c */
 void ZLIB_INTERNAL _tr_init OF((deflate_state *s));
 int ZLIB_INTERNAL _tr_tally OF((deflate_state *s, unsigned dist, unsigned lc));
@@ -500,5 +508,26 @@ ZLIB_INTERNAL void check_match OF((deflate_state *s, IPos start, IPos match,
     match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
     s->head[s->ins_h] = (Pos)(str))
 #endif
+
+/* ===========================================================================
+ * Flush the current block, with given end-of-file flag.
+ * IN assertion: strstart is set to the end of the current match.
+ */
+#define FLUSH_BLOCK_ONLY(s, last) { \
+   _tr_flush_block(s, (s->block_start >= 0L ? \
+                   (charf *)&s->window[(unsigned)s->block_start] : \
+                   (charf *)Z_NULL), \
+                (ulg)((long)s->strstart - s->block_start), \
+                (last)); \
+   s->block_start = s->strstart; \
+   flush_pending(s->strm); \
+   Tracev((stderr,"[FLUSH]")); \
+}
+
+/* Same but force premature exit if necessary. */
+#define FLUSH_BLOCK(s, last) { \
+   FLUSH_BLOCK_ONLY(s, last); \
+   if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
+}
 
 #endif /* DEFLATE_H */
