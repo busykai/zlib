@@ -51,6 +51,9 @@
 #define Buf_size 16
 /* size of bit buffer in bi_buf */
 
+#define END_BLOCK 256
+/* end of block literal code */
+
 #define INIT_STATE    42    /* zlib header -> BUSY_STATE */
 #ifdef GZIP
 #  define GZIP_STATE  57    /* gzip header -> BUSY_STATE | EXTRA_STATE */
@@ -63,6 +66,12 @@
 #define FINISH_STATE 666    /* stream complete */
 /* Stream status */
 
+typedef enum {
+    need_more,      /* block not completed, need more input or more output */
+    block_done,     /* block flush performed */
+    finish_started, /* finish started, need only more output at next deflate */
+    finish_done     /* finish done, accept no more input or output */
+} block_state;
 
 /* Data structure describing a single value and its code string. */
 typedef struct ct_data_s {
@@ -303,6 +312,7 @@ void ZLIB_INTERNAL _tr_flush_bits OF((deflate_state *s));
 void ZLIB_INTERNAL _tr_align OF((deflate_state *s));
 void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
                         ulg stored_len, int last));
+void ZLIB_INTERNAL bi_windup      OF((deflate_state *s));
 
 #define d_code(dist) \
    ((dist) < 256 ? _dist_code[dist] : _dist_code[256+((dist)>>7)])
@@ -345,6 +355,84 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
 # define _tr_tally_lit(s, c, flush) flush = _tr_tally(s, 0, c)
 # define _tr_tally_dist(s, distance, length, flush) \
               flush = _tr_tally(s, distance, length)
+#endif
+
+#ifndef ZLIB_DEBUG
+#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
+   /* Send a code of the given tree. c and tree must not have side effects */
+
+#else /* !ZLIB_DEBUG */
+#  define send_code(s, c, tree) \
+     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
+       send_bits(s, tree[c].Code, tree[c].Len); }
+#endif
+
+/* ===========================================================================
+ * Output a short LSB first on the stream.
+ * IN assertion: there is enough room in pendingBuf.
+ */
+#define put_short(s, w) { \
+    put_byte(s, (uch)((w) & 0xff)); \
+    put_byte(s, (uch)((ush)(w) >> 8)); \
+}
+
+/* ===========================================================================
+ * Send a value on a given number of bits.
+ * IN assertion: length <= 16 and value fits in length bits.
+ */
+#ifdef ZLIB_DEBUG
+local void send_bits      OF((deflate_state *s, int value, int length));
+
+local void send_bits(s, value, length)
+    deflate_state *s;
+    int value;  /* value to send */
+    int length; /* number of bits */
+{
+    Tracevv((stderr," l %2d v %4x ", length, value));
+    Assert(length > 0 && length <= 15, "invalid length");
+    s->bits_sent += (ulg)length;
+
+    /* If not enough room in bi_buf, use (valid) bits from bi_buf and
+     * (16 - bi_valid) bits from value, leaving (width - (16-bi_valid))
+     * unused bits in value.
+     */
+    if (s->bi_valid > (int)Buf_size - length) {
+        s->bi_buf |= (ush)value << s->bi_valid;
+        put_short(s, s->bi_buf);
+        s->bi_buf = (ush)value >> (Buf_size - s->bi_valid);
+        s->bi_valid += length - Buf_size;
+    } else {
+        s->bi_buf |= (ush)value << s->bi_valid;
+        s->bi_valid += length;
+    }
+}
+#else /* !ZLIB_DEBUG */
+
+#define send_bits(s, value, length) \
+{ int len = length;\
+  if (s->bi_valid > (int)Buf_size - len) {\
+    int val = (int)value;\
+    s->bi_buf |= (ush)val << s->bi_valid;\
+    put_short(s, s->bi_buf);\
+    s->bi_buf = (ush)val >> (Buf_size - s->bi_valid);\
+    s->bi_valid += len - Buf_size;\
+  } else {\
+    s->bi_buf |= (ush)(value) << s->bi_valid;\
+    s->bi_valid += len;\
+  }\
+}
+#endif /* ZLIB_DEBUG */
+
+/* the arguments must not have side effects */
+
+ZLIB_INTERNAL void flush_pending  OF((z_streamp strm));
+ZLIB_INTERNAL void fill_window    OF((deflate_state *s));
+
+#ifdef ZLIB_DEBUG
+ZLIB_INTERNAL void check_match OF((deflate_state *s, IPos start, IPos match,
+                            int length));
+#else
+#  define check_match(s, start, match, length)
 #endif
 
 /* ===========================================================================
