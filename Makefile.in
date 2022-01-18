@@ -75,7 +75,7 @@ PIC_OBJS = $(PIC_OBJC) $(PIC_OBJA)
 
 all: static shared
 
-static: example$(EXE) minigzip$(EXE)
+static: example$(EXE) minigzip$(EXE) minibench$(EXE)
 
 shared: examplesh$(EXE) minigzipsh$(EXE)
 
@@ -136,6 +136,9 @@ example.o: $(SRCDIR)test/example.c $(SRCDIR)zlib.h zconf.h
 
 minigzip.o: $(SRCDIR)test/minigzip.c $(SRCDIR)zlib.h zconf.h
 	$(CC) $(CFLAGS) $(ZINCOUT) -c -o $@ $(SRCDIR)test/minigzip.c
+
+minibench.o: $(SRCDIR)test/minibench.c $(SRCDIR)zlib.h zconf.h
+	$(CC) $(CFLAGS) $(ZINCOUT) -c -o $@ $<
 
 example64.o: $(SRCDIR)test/example.c $(SRCDIR)zlib.h zconf.h
 	$(CC) $(CFLAGS) $(ZINCOUT) -D_FILE_OFFSET_BITS=64 -c -o $@ $(SRCDIR)test/example.c
@@ -324,6 +327,9 @@ example$(EXE): example.o $(STATICLIB)
 
 minigzip$(EXE): minigzip.o $(STATICLIB)
 	$(CC) $(CFLAGS) -o $@ minigzip.o $(TEST_LDFLAGS)
+
+minibench$(EXE): minibench.o $(STATICLIB)
+	$(CC) $(CFLAGS) -o $@ minibench.o $(TEST_LDFLAGS)
 
 examplesh$(EXE): example.o $(SHAREDLIBV)
 	$(CC) $(CFLAGS) -o $@ example.o -L. $(SHAREDLIBV)
